@@ -532,42 +532,477 @@ public class EmpleadoPorHora extends Empleado {
 
 <a id="persistencia-y-optimizacion"></a>
 ## Persitencia y optimización
+La persistencia en Hibernate se refiere al proceso de guardar, recuperar, actualizar y eliminar datos de la base de datos utilizando tus objetos Java. La optimización busca asegurar que estas operaciones se realicen de la manera más eficiente posible, minimizando el uso de recursos y maximizando la velocidad de la aplicación.
 
 <a id="operaciones-crud"></a>
 ### Operaciones CRUD
+CRUD es un acrónimo que representa las cuatro operaciones básicas de persistencia:
+
+1, Create (Crear): Guardar un nuevo objeto en la base de datos. En Hibernate, esto se logra principalmente utilizando los métodos save(), persist(), y merge() de la interfaz Session.
+
+2. Read (Leer): Recuperar un objeto existente de la base de datos. Los métodos principales para esto son get(), load(), y las consultas a través de HQL, Criteria API o SQL nativo.
+
+3. Update (Actualizar): Modificar el estado de un objeto persistente y sincronizar estos cambios con la base de datos. Esto se realiza principalmente a través del método update() o simplemente modificando un objeto que ya está en estado persistente dentro de una transacción (auto-dirty checking). También se puede usar merge() para actualizar un objeto desvinculado.
+
+4. Delete (Borrar): Eliminar un objeto de la base de datos. Se utiliza el método delete() de la interfaz Session.
 
 <a id="uso-de-session-en-crud"></a>
 #### Uso del Session para operaciones básicas
 
+> Operación create
+```
+Session session = sessionFactory.openSession();
+Transaction transaction = null;
+try {
+    transaction = session.beginTransaction();
+
+    Usuario nuevoUsuario = new Usuario();
+    nuevoUsuario.setNombre("Juan Pérez");
+    nuevoUsuario.setEmail("juan.perez@example.com");
+
+    // save(): Guarda el objeto y le asigna un identificador inmediatamente.
+    Long idGuardado = (Long) session.save(nuevoUsuario);
+    System.out.println("ID del usuario guardado: " + idGuardado);
+
+    // persist(): Guarda el objeto, pero no garantiza la asignación inmediata del identificador.
+    // Es preferible para la semántica de JPA.
+    Pedido nuevoPedido = new Pedido();
+    nuevoPedido.setFechaPedido(new java.util.Date());
+    session.persist(nuevoPedido);
+
+    transaction.commit();
+} catch (Exception e) {
+    if (transaction != null) {
+        transaction.rollback();
+    }
+    e.printStackTrace();
+} finally {
+    session.close();
+}
+```
+
+> Operación read
+```
+Session session = sessionFactory.openSession();
+try {
+    // get(): Recupera el objeto inmediatamente. Si no existe, devuelve null.
+    Usuario usuario1 = session.get(Usuario.class, 1L);
+    if (usuario1 != null) {
+        System.out.println("Usuario encontrado (get): " + usuario1.getNombre());
+    } else {
+        System.out.println("Usuario con ID 1 no encontrado (get).");
+    }
+
+    // load(): Recupera un proxy del objeto inmediatamente. El objeto real se carga solo cuando se accede a sus propiedades.
+    // Si el objeto no existe en la base de datos, lanza una excepción (ObjectNotFoundException) al acceder a sus propiedades.
+    Usuario usuario2 = session.load(Usuario.class, 2L);
+    System.out.println("Proxy de usuario cargado (load).");
+    // Intentar acceder a una propiedad forzará la carga del objeto.
+    try {
+        System.out.println("Nombre del usuario (load): " + usuario2.getNombre());
+    } catch (org.hibernate.ObjectNotFoundException e) {
+        System.out.println("Usuario con ID 2 no encontrado (load).");
+    }
+
+    // Consultas (HQL, Criteria, Native SQL) se utilizan para leer conjuntos de objetos o realizar búsquedas más complejas.
+    // Ejemplo con HQL:
+    java.util.List<Usuario> usuarios = session.createQuery("from Usuario where nombre like :nombre", Usuario.class)
+            .setParameter("nombre", "J%").list();
+    for (Usuario u : usuarios) {
+        System.out.println("Usuario encontrado por nombre: " + u.getNombre());
+    }
+
+} catch (Exception e) {
+    e.printStackTrace();
+} finally {
+    session.close();
+}
+```
+
+> Operación update
+```
+Session session = sessionFactory.openSession();
+Transaction transaction = null;
+try {
+    transaction = session.beginTransaction();
+
+    // Método 1: Cargar el objeto y modificarlo (auto-dirty checking).
+    Usuario usuarioParaActualizar = session.get(Usuario.class, 1L);
+    if (usuarioParaActualizar != null) {
+        usuarioParaActualizar.setEmail("juan.perez.actualizado@example.com");
+        // No es necesario llamar a un método update() explícitamente.
+        // Hibernate detectará los cambios al final de la transacción (o al hacer flush).
+    }
+
+    // Método 2: Usar el método update() para un objeto que ya está asociado a la sesión.
+    if (usuarioParaActualizar != null) {
+        session.update(usuarioParaActualizar);
+    }
+
+    // Método 3: Usar merge() para actualizar un objeto desvinculado.
+    Usuario usuarioDesvinculado = new Usuario();
+    usuarioDesvinculado.setId(2L);
+    usuarioDesvinculado.setNombre("Carlos López (Actualizado)");
+    Usuario usuarioMergeado = (Usuario) session.merge(usuarioDesvinculado);
+    System.out.println("Usuario mergeado con ID: " + usuarioMergeado.getId());
+
+    transaction.commit();
+} catch (Exception e) {
+    if (transaction != null) {
+        transaction.rollback();
+    }
+    e.printStackTrace();
+} finally {
+    session.close();
+}
+```
+
+> Operación delete
+```
+Session session = sessionFactory.openSession();
+Transaction transaction = null;
+try {
+    transaction = session.beginTransaction();
+
+    Usuario usuarioParaBorrar = session.get(Usuario.class, 3L);
+    if (usuarioParaBorrar != null) {
+        session.delete(usuarioParaBorrar);
+        System.out.println("Usuario con ID 3 borrado.");
+    } else {
+        System.out.println("Usuario con ID 3 no encontrado para borrar.");
+    }
+
+    transaction.commit();
+} catch (Exception e) {
+    if (transaction != null) {
+        transaction.rollback();
+    }
+    e.printStackTrace();
+} finally {
+    session.close();
+}
+```
+
+> [!IMPORTANT]
+> Siempre se deben de manejar las transacciones correctamente (iniciar, confirmar o deshacer) y cerrar la Session en un bloque finally para liberar los recursos.
+
 <a id="cache-de-hibernate"></a>
 ### Caché de Hibernate
+El caché de Hibernate es un mecanismo crucial para mejorar el rendimiento de las aplicaciones al reducir la frecuencia con la que se accede a la base de datos. Hibernate ofrece varios niveles de caché.
 
 <a id="cache-de-primer-nivel"></a>
 #### Caché de primer nivel
+> Características:
+
+1. El caché de primer nivel está asociado a una instancia de Session.
+2. Es habilitado por defecto y **no se puede deshabilitar**.
+3. Cuando Hibernate carga un objeto desde la base de datos dentro de una sesión, lo almacena en el caché de primer nivel por su identificador. Si se solicita el mismo objeto nuevamente dentro de la misma sesión, Hibernate lo recupera del caché en lugar de ir a la base de datos.
+4. Los cambios realizados en un objeto persistente dentro de la sesión también se reflejan en el caché de primer nivel.
+5. **El caché de primer nivel no se comparte entre diferentes sesiones**. Cada nueva sesión tiene su propio caché.
+6. La vida útil de los objetos en el caché de primer nivel está limitada a la vida útil de la Session. **Cuando la sesión se cierra, el caché se descarta**.
+
+> [!IMPORTANT]
+> Debido a que está asociado a la sesión, su alcance es limitado a una única transacción o unidad de trabajo.
 
 <a id="cache-de-segundo-nivel"></a>
 #### Caché de segundo nivel
+El caché de segundo nivel está asociado a la SessionFactory y **es compartido por todas las sesiones creadas por esa fábrica**. Su objetivo es almacenar objetos y datos de consulta que pueden ser reutilizados entre diferentes sesiones y transacciones, mejorando significativamente el rendimiento
+
+- Hibernate permite la integración con varios proveedores de caché de segundo nivel, como:
+1. Ehcache: Un proveedor de caché distribuido en memoria.
+2. Hazelcast: Una plataforma de computación en memoria distribuida.
+3. Infinispan: Un data grid distribuido y un caché en memoria.
+4. Redis: Un almacén de estructuras de datos en memoria.
+5. Memcached: Un sistema de caché distribuido en memoria.
+
+> Configuración del Caché de Segundo Nivel
+
+1. Agregar la dependencia del proveedor de caché dentro del proyecto (por ejemplo, la dependencia de Ehcache en Maven o Gradle).
+
+2. Configurar las propiedades del caché de segundo nivel en el archivo hibernate.cfg.xml o mediante configuración programática. Esto incluye especificar el proveedor de caché y cualquier configuración específica del proveedor.
+```
+<hibernate-configuration>
+    <session-factory>
+        <property name="hibernate.cache.use_second_level_cache">true</property>
+        <property name="hibernate.cache.region.factory_class">org.hibernate.cache.ehcache.EhCacheRegionFactory</property>
+        </session-factory>
+</hibernate-configuration>
+```
+
+3. Marcar las entidades que deben ser cacheadas utilizando la anotación @Cache (de JPA o Hibernate). Se puede especificar la estrategia de concurrencia del caché.
+```
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import org.hibernate.annotations.Cache;
+import org.hibernate.annotations.CacheConcurrencyStrategy;
+
+@Entity
+@Cache(usage = CacheConcurrencyStrategy.READ_WRITE)
+public class Producto {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+    private String nombre;
+    private java.math.BigDecimal precio;
+    // ...
+}
+```
+
+- Estrategias de Concurrencia del Caché de Segundo Nivel (CacheConcurrencyStrategy):
+
+* `READ_ONLY`: Para entidades que nunca cambian. Es la estrategia más segura y rápida.
+* `NONSTRICT_READ_WRITE`: Para entidades que cambian con poca frecuencia y la consistencia estricta no es crítica.
+* `READ_WRITE`: Para entidades que pueden cambiar, Hibernate utiliza un mecanismo de bloqueo suave para garantizar la consistencia.
+* `TRANSACTIONAL`: Para entornos JTA donde el caché se sincroniza con las transacciones JTA.
+
+> [!NOTE]
+> El caché de segundo nivel se organiza en regiones. Por defecto, Hibernate utiliza una región por entidad cacheada. También se pueden cachear los resultados de las consultas (query cache)
+
 
 <a id="otros-niveles-de-caches"></a>
 #### Otros niveles de caché
 
+* `Caché de Nivel Web (HTTP Cache)`: Para aplicaciones web, el uso de encabezados de caché HTTP (como Cache-Control, Expires, ETag, Last-Modified) puede reducir la cantidad de solicitudes al servidor al almacenar respuestas en el navegador o en servidores proxy.
+
+* `Caché de Base de Datos`: Muchas bases de datos tienen sus propios mecanismos de caché para optimizar las consultas. Comprender y configurar el caché de la base de datos también es importante para el rendimiento general.
+
+
 <a id="estrategias-de-carga"></a>
 ### Fetch Strategies (Estrategias de Carga)
+Las estrategias de carga **definen cómo Hibernate recupera las entidades relacionadas (asociaciones)**. La elección de la estrategia de carga puede tener un impacto significativo en el número de consultas a la base de datos y, por lo tanto, en el rendimiento de la aplicación. Las dos estrategias principales son:
 
+> Eager Loading (Carga Ansiosa)
+Las entidades relacionadas **se cargan al mismo tiempo que la entidad principal**, en la misma consulta SQL (generalmente utilizando JOINs).
+
+Se configura utilizando el atributo fetch = FetchType.EAGER en las anotaciones de las relaciones (@OneToOne, @ManyToOne, @OneToMany, @ManyToMany).
+
+- Ventajas
+1. Evita el problema del "N+1 selects".
+
+- Desventajas
+1. Puede cargar una gran cantidad de datos innecesarios si no siempre se necesitan las entidades relacionadas, lo que puede consumir memoria
+
+> Lazy Loading (Carga Perezosa)
+
+Las entidades relacionadas no se cargan inmediatamente. Se carga un "proxy" (un objeto marcador de posición). Los datos reales de la entidad relacionada **se cargan solo cuando se accede a sus propiedades por primera vez** (lo que generalmente resulta en una consulta adicional a la base de datos).
+
+Es la estrategia de carga por defecto para las colecciones (@OneToMany, @ManyToMany) y puede configurarse para relaciones individuales (@OneToOne, @ManyToOne) utilizando fetch = FetchType.LAZY
+
+- Ventajas
+1. Carga solo los datos necesarios cuando se solicitan, lo que puede mejorar el rendimiento inicial y reducir el consumo de memoria
+
+- Desventajas
+1. Se puede llevar al problema del "N+1 selects". Si cargas N entidades y cada una tiene una colección relacionada que se carga de forma perezosa al acceder a ella, Hibernate podría ejecutar N+1 consultas a la base de datos (una para cargar las N entidades y N consultas adicionales para cargar las colecciones de cada entidad).
+2. Requiere que la Session esté abierta cuando se accede a las relaciones cargadas perezosamente.
+
+Para mitigar el problema del "N+1 selects" con la carga perezosa, Hibernate ofrece varias estrategias de fetching que se pueden especificar en las consultas (HQL o Criteria API):
+
+- `JOIN FETCH (o FETCH JOIN en HQL)`: Fuerza la carga ansiosa de la asociación especificada en la consulta, anulando la estrategia de carga definida en el mapeo de la entidad.
+```
+SELECT c FROM Cliente c JOIN FETCH c.pedidos WHERE c.id = :clienteId
+```
+
+- `Batch Fetching`: Permite a Hibernate cargar múltiples colecciones perezosas en una sola consulta cuando se accede a la primera de ellas. Se configura mediante las anotaciones @BatchSize (en la colección) o @Fetch(FetchMode.SUBSELECT) (para cargar todas las colecciones de las entidades cargadas en una subconsulta).
+
+- `Subselect Fetching (@Fetch(FetchMode.SUBSELECT))`: Carga todas las colecciones perezosas de las entidades padre cargadas en una sola subconsulta. Esto puede ser útil cuando se cargan múltiples entidades padre y se necesita acceder a sus colecciones.
+
+  
 <a id="consultas-y-recuperacion-de-datos"></a>
 ## Consultas y recuperación de datos
+Hibernate ofrece varias formas de consultar y recuperar datos de la base de datos, cada una con sus propias características y casos de uso. Las principales son HQL, Criteria API y Native SQL.
 
 <a id="HQL"></a>
 ### HQL (Hibernate Query Language)
+HQL es un `lenguaje de consulta orientado a objetos que es sensible a mayúsculas y minúsculas` (excepto para las palabras clave HQL). Se parece a SQL, pero en lugar de operar sobre tablas y columnas, opera sobre entidades y sus atributos. Hibernate **traduce las consultas HQL al SQL específico del dialecto de la base de datos subyacente**.
+
+> Principales características
+1. Opera sobre entidades y sus propiedades: En lugar de SELECT * FROM tabla, en HQL escribirías algo como FROM Entidad.
+2. Soporta asociaciones: Se puede navegar por las relaciones entre entidades directamente en las consultas (usando la notación de punto).
+3. Polimorfismo: Las consultas sobre una superclase también pueden devolver instancias de sus subclases (dependiendo de la estrategia de herencia).
+4. Parámetros con nombre y posicionales: Permite escribir consultas más seguras y legibles.
+5. Funciones y operadores: Soporta muchas de las funciones y operadores SQL estándar, así como algunas específicas de Hibernate.
+6. Paginación y ordenamiento: Facilita la recuperación de datos en lotes y la ordenación de los resultados.
+7. Proyecciones y agregaciones: Permite seleccionar atributos específicos y realizar funciones de agregación.
+
+> Ejemplos
+- Seleccionar todas las entidades de un tipo
+```
+List<Usuario> usuarios = session.createQuery("FROM Usuario", Usuario.class).list();
+```
+
+- Seleccionar entidades con una condición (cláusula WHERE)
+```
+List<Pedido> pedidosDeCliente = session.createQuery("FROM Pedido WHERE cliente.id = :clienteId", Pedido.class)
+        .setParameter("clienteId", clienteId).list();
+```
+
+- Realizar joins explícitos
+```
+List<Object[]> clientesConPedidos = session.createQuery("SELECT c, p FROM Cliente c JOIN c.pedidos p").list();
+```
+
+- Usar funciones de agregación
+```
+Long totalPedidos = session.createQuery("SELECT COUNT(*) FROM Pedido", Long.class).uniqueResult();
+Double promedioPrecio = session.createQuery("SELECT AVG(p.precio) FROM Producto p", Double.class).uniqueResult();
+```
+
+Las consultas HQL se ejecutan utilizando la interfaz Query obtenida de la Session.
+```
+Query<Usuario> query = session.createQuery("FROM Usuario WHERE edad > :edad", Usuario.class);
+query.setParameter("edad", 30);
+List<Usuario> usuariosMayoresDe30 = query.list();
+```
 
 <a id="criteria-api"></a>
 ### Criteria API
 
+La Criteria API es una API programática para construir consultas Hibernate de forma dinámica utilizando objetos Java en lugar de cadenas de texto HQL.
+
+> Componentes Principales de la Criteria API:
+
+- CriteriaBuilder: Una fábrica para crear objetos de consulta (CriteriaQuery), expresiones, predicados (restricciones) y funciones de agregación. Se obtiene de la EntityManagerFactory (en un contexto JPA) o de la Session (en Hibernate puro).
+
+- CriteriaQuery: Representa una consulta completa. Define la entidad raíz de la consulta (la cláusula FROM) y puede especificar el tipo del resultado (por ejemplo, una entidad o un tipo específico).
+
+- Root<T>: Representa la entidad raíz de la consulta (la tabla principal en SQL). Permite acceder a los atributos de la entidad para definir restricciones y selecciones.
+
+- Predicate: Representa una condición o restricción (la cláusula WHERE en SQL). Se construyen utilizando métodos del CriteriaBuilder (por ejemplo, equal(), like(), greaterThan()).
+
+- Selection: Define lo que se va a seleccionar (la cláusula SELECT en SQL). Puede ser la entidad completa o atributos específicos.
+
+- Order: Define el criterio de ordenamiento (la cláusula ORDER BY en SQL).
+
+> Ejemplos
+
+- Seleccionar entidades con una condición
+```
+  CriteriaBuilder cb = session.getCriteriaBuilder();
+  CriteriaQuery<Pedido> cq = cb.createQuery(Pedido.class);
+  Root<Pedido> root = cq.from(Pedido.class);
+  Predicate estadoPendiente = cb.equal(root.get("estado"), "PENDIENTE");
+  cq.where(estadoPendiente);
+  List<Pedido> pedidosPendientes = session.createQuery(cq).list();
+```
+
+- Seleccionar atributos específicos (proyección)
+```
+  CriteriaBuilder cb = session.getCriteriaBuilder();
+  CriteriaQuery<String> cq = cb.createQuery(String.class);
+  Root<Usuario> root = cq.from(Usuario.class);
+  cq.select(root.get("nombre"));
+  List<String> nombresDeUsuario = session.createQuery(cq).list();
+  
+  CriteriaQuery<Object[]> cq2 = cb.createQuery(Object[].class);
+  Root<Usuario> root2 = cq2.from(Usuario.class);
+  cq2.multiselect(root2.get("nombre"), root2.get("email"));
+  List<Object[]> nombreYEmail = session.createQuery(cq2).list();
+```
+
+- Usar parámetros
+```
+  CriteriaBuilder cb = session.getCriteriaBuilder();
+  CriteriaQuery<Pedido> cq = cb.createQuery(Pedido.class);
+  Root<Pedido> root = cq.from(Pedido.class);
+  Join<Pedido, Cliente> clienteJoin = root.join("cliente");
+  Predicate clienteEspecifico = cb.equal(clienteJoin.get("id"), clienteId);
+  cq.where(clienteEspecifico);
+  List<Pedido> pedidosDeCliente = session.createQuery(cq)
+          .setParameter("clienteId", clienteId) // No se define aquí, se pasa al crear la Query
+          .list();
+```
+
+> [!NOTE]
+> 
+> La Criteria API es especialmente útil para construir consultas dinámicas y complejas donde las condiciones varían en tiempo de ejecución.
+
 <a id="native-sql"></a>
 ### Native SQL
+Hibernate también permite ejecutar consultas SQL nativas directamente contra la base de datos. Esto puede ser útil cuando necesitas utilizar características específicas de la base de datos que no están soportadas por HQL o la Criteria API.
 
+Para la ejecución de consultas nativas se utiliza el método createNativeQuery() de la Session.
+> Ejemplo
+```
+// Mapear el resultado a una entidad
+List<Usuario> usuariosPorSQL = session.createNativeQuery("SELECT * FROM usuarios WHERE edad > :edad", Usuario.class)
+        .setParameter("edad", 25)
+        .list();
+
+// Obtener un resultado escalar
+Object nombreUsuario = session.createNativeQuery("SELECT nombre FROM usuarios WHERE id = :id")
+        .setParameter("id", 1L)
+        .uniqueResult();
+
+// Obtener una lista de arrays de objetos
+List<Object[]> resultados = session.createNativeQuery("SELECT nombre, email FROM usuarios WHERE activo = 1")
+        .list();
+for (Object[] resultado : resultados) {
+    String nombre = (String) resultado[0];
+    String email = (String) resultado[1];
+    System.out.println("Nombre: " + nombre + ", Email: " + email);
+}
+
+// Usar ResultTransformer para mapear a un DTO (Data Transfer Object)
+List<UsuarioDTO> usuariosDTO = session.createNativeQuery("SELECT id, nombre, email FROM usuarios WHERE activo = 1")
+        .setResultTransformer(Transformers.aliasToBean(UsuarioDTO.class))
+        .list();
+```
+
+- Consideraciones
+1. Las consultas SQL nativas son específicas de la base de datos subyacente. Cambiar la base de datos requerirá modificar estas consultas.
+2. No hay verificación de sintaxis por parte de Hibernate hasta el momento de la ejecución.
+   
 <a id="proyecciones-y-agregaciones"></a>
 ### Proyecciones y agregaciones
+Tanto HQL como la Criteria API permiten seleccionar proyecciones (subconjuntos de los atributos de una entidad) y realizar funciones de agregación sobre los datos.
+
+- Proyecciones
+
+Las proyecciones permiten **seleccionar atributos específicos de una entidad** en lugar de la entidad completa. Esto puede ser útil para optimizar las consultas cuando solo necesitas ciertos datos.
+
+- Agregaciones
+
+Hibernate soporta las funciones de agregación estándar de SQL como COUNT(), AVG(), SUM(), MIN(), MAX(). Estas funciones se pueden utilizar tanto en HQL como en la Criteria API
+
+> Ejemplo de proyección y agregación combinados (HQL)
+```
+List<Object[]> resumenPedidos = session.createQuery(
+        "SELECT c.nombre, COUNT(p), AVG(p.total) " +
+        "FROM Cliente c JOIN c.pedidos p " +
+        "GROUP BY c.nombre " +
+        "ORDER BY COUNT(p) DESC")
+        .list();
+
+for (Object[] resultado : resumenPedidos) {
+    String nombreCliente = (String) resultado[0];
+    Long cantidadPedidos = (Long) resultado[1];
+    Double promedioTotal = (Double) resultado[2];
+    System.out.println("Cliente: " + nombreCliente + ", Pedidos: " + cantidadPedidos + ", Promedio Total: " + promedioTotal);
+}
+```
+
+> Ejemplo de proyección y agregación combinados (Criteria API):
+```
+CriteriaBuilder cb = session.getCriteriaBuilder();
+CriteriaQuery<Object[]> cq = cb.createQuery(Object[].class);
+Root<Cliente> clienteRoot = cq.from(Cliente.class);
+Join<Cliente, Pedido> pedidoJoin = clienteRoot.join("pedidos");
+
+cq.multiselect(clienteRoot.get("nombre"), cb.count(pedidoJoin), cb.avg(pedidoJoin.get("total")))
+        .groupBy(clienteRoot.get("nombre"))
+        .orderBy(cb.desc(cb.count(pedidoJoin)));
+
+List<Object[]> resumenPedidos = session.createQuery(cq).list();
+
+for (Object[] resultado : resumenPedidos) {
+    String nombreCliente = (String) resultado[0];
+    Long cantidadPedidos = (Long) resultado[1];
+    Double promedioTotal = (Double) resultado[2];
+    System.out.println("Cliente: " + nombreCliente + ", Pedidos: " + cantidadPedidos + ", Promedio Total: " + promedioTotal);
+}
+```
 
 <a id="temas-avanzados"></a>
 ## Temas avanzados
