@@ -1010,8 +1010,181 @@ for (Object[] resultado : resumenPedidos) {
 <a id="interceptores-y-listeners"></a>
 ### Interceptores y listeners
 
+Tanto los interceptores como los listeners en Hibernate te **permiten interceptar eventos que ocurren durante el procesamiento de las entidades y las interacciones con la base de datos**. Esto te brinda la capacidad de ejecutar lógica personalizada en puntos específicos del ciclo de vida de Hibernate
+
+> Interceptores (Implementación de la interfaz org.hibernate.Interceptor)
+Un interceptor es una interfaz que define una serie de callbacks (métodos) que **Hibernate invoca en momentos específicos durante el procesamiento de las entidades**. Se puede implementar esta interfaz para monitorear y/o modificar el comportamiento predeterminado de Hibernate.
+
+- Características de los Interceptores:
+1. Asociados a una Session: Una instancia de un interceptor se asocia típicamente con una instancia de Session.
+2. Acceso al estado de las entidades: Los interceptores tienen acceso al estado de las entidades (sus atributos) y pueden modificarlos antes de que se persistan, actualicen o eliminen.
+3. Implementación de lógica transversal: Son útiles para implementar lógica que afecta a múltiples entidades o operaciones, como auditoría, logging, o manipulación de datos común.
+
+Métodos Comunes de la Interfaz Interceptor:
+
+- onSave(Object entity, Serializable id, Object[] state, String[] propertyNames, Type[] types): Se invoca antes de que una entidad se guarde en la base de datos. Permite modificar el estado de la entidad.
+
+- onUpdate(Object entity, Serializable id, Object[] currentState, Object[] previousState, String[] propertyNames, Type[] types): Se invoca antes de que se actualice una entidad en la base de datos. Permite comparar el estado actual y anterior y modificar el estado actual.
+
+- onDelete(Object entity, Serializable id, Object[] state, String[] propertyNames, Type[] types): Se invoca antes de que se elimine una entidad de la base de datos.
+
+- onLoad(Object entity, Serializable id, Object[] state, String[] propertyNames, Type[] types): Se invoca después de que una entidad se carga de la base de datos. Permite modificar el estado cargado.
+
+- preFlush(Iterator entities): Se invoca antes de que Hibernate sincronice los cambios en la sesión con la base de datos (antes del flush).
+
+- postFlush(Iterator entities): Se invoca después de que Hibernate sincroniza los cambios con la base de datos (después del flush).
+
+- findDirty(Object entity, Serializable id, Object[] currentState, Object[] previousState, String[] propertyNames, Type[] types): Se invoca para determinar si una entidad está "sucia" (ha cambiado) y necesita ser actualizada. Puedes personalizar la detección de cambios.
+
+- instantiate(String entityName, EntityMode entityMode, Serializable id): Permite personalizar la forma en que se instancian las entidades.
+
+- isTransient(Object entity): Permite personalizar la forma en que Hibernate determina si una entidad es transitoria.
+
+- getEntity(String entityName, Serializable id): Permite obtener una instancia de una entidad del caché o de la base de datos.
+
+- afterTransactionBegin(Transaction tx): Se invoca después de que comienza una transacción.
+
+- beforeTransactionCompletion(Transaction tx): Se invoca justo antes de que una transacción se complete (commit o rollback).
+
+- afterTransactionCompletion(Transaction tx, boolean success): Se invoca después de que una transacción se completa.
+
+> Ejemplo
+```
+public class MiInterceptor implements Interceptor {
+    @Override
+    public boolean onSave(Object entity, Serializable id, Object[] state, String[] propertyNames, Type[] types) {
+        if (entity instanceof Auditable) {
+            ((Auditable) entity).setFechaCreacion(new Date());
+            // Puedes modificar el estado aquí si es necesario
+            for (int i = 0; i < propertyNames.length; i++) {
+                if ("usuarioCreacion".equals(propertyNames[i])) {
+                    state[i] = getCurrentUser(); // Ejemplo de obtener el usuario actual
+                    return true; // Indica que el estado ha sido modificado
+                }
+            }
+        }
+        return false; // Indica que el estado no ha sido modificado
+    }
+
+    // Implementa otros métodos de la interfaz Interceptor según sea necesario...
+}
+
+// Uso del interceptor al abrir la sesión:
+SessionFactory sessionFactory = configuration.buildSessionFactory(serviceRegistry);
+Session session = sessionFactory.openSession(new MiInterceptor());
+Transaction tx = null;
+try {
+    tx = session.beginTransaction();
+    // Realizar operaciones con la sesión...
+    tx.commit();
+} catch (Exception e) {
+    if (tx != null) tx.rollback();
+    e.printStackTrace();
+} finally {
+    session.close();
+}
+```
+
+> Listeners (Implementación de interfaces en el paquete org.hibernate.event.spi)
+Los listeners proporcionan un modelo de eventos más específico y granular que los interceptores. Hibernate **define varios tipos de eventos que ocurren durante el ciclo de vida de las entidades y las operaciones de persistencia**. Se puede implementar interfaces específicas para escuchar estos eventos y ejecutar lógica personalizada.
+
+> [!NOTE]
+>
+> Los listeners se registran a nivel de la SessionFactory y se aplican a todas las sesiones creadas por esa fábrica.
+
+- Interfaces de listener Comunes
+
+1. PreInsertEventListener / PostInsertEventListener: Se invocan antes y después de que una entidad se inserte en la base de datos.
+
+2. PreUpdateEventListener / PostUpdateEventListener: Se invocan antes y después de que se actualice una entidad en la base de datos.
+
+3. PreDeleteEventListener / PostDeleteEventListener: Se invocan antes y después de que se elimine una entidad de la base de datos.
+
+4. PreLoadEventListener / PostLoadEventListener: Se invocan antes y después de que una entidad se cargue de la base de datos.
+
+5. SaveOrUpdateEventListener: Se invoca cuando se guarda o actualiza una entidad.
+
+
+- Registro programático
+```
+ServiceRegistry serviceRegistry = new StandardServiceRegistryBuilder()
+        .applySettings(configuration.getProperties())
+        .addService(EventListenerRegistry.class, new EventListenerRegistryImpl()) // Necesario para Hibernate puro
+        .build();
+
+EventListenerRegistry eventListenerRegistry = serviceRegistry.getService(EventListenerRegistry.class);
+eventListenerRegistry.appendListeners(EventType.PRE_INSERT, new MiPreInsertListener());
+eventListenerRegistry.appendListeners(EventType.POST_LOAD, new MiPostLoadListener());
+
+SessionFactory sessionFactory = configuration.buildSessionFactory(serviceRegistry);
+```
+
+- Registro en hibernate.cfg.xml (Hibernate puro)
+```
+<hibernate-configuration>
+    <session-factory>
+        <event type="pre-insert">
+            <listener class="com.example.hibernate.listener.MiPreInsertListener"/>
+        </event>
+        <event type="post-load">
+            <listener class="com.example.hibernate.listener.MiPostLoadListener"/>
+        </event>
+    </session-factory>
+</hibernate-configuration>
+```
+
+- Registro en persistence.xml (JPA con Hibernate como proveedor)
+```
+<persistence version="2.2" xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence http://xmlns.jcp.org/xml/ns/persistence/persistence_2_2.xsd">
+    <persistence-unit name="miUnidadPersistencia">
+        <properties>
+            <property name="hibernate.event.listeners.pre_insert" value="com.example.hibernate.listener.MiPreInsertListener"/>
+            <property name="hibernate.event.listeners.post_load" value="com.example.hibernate.listener.MiPostLoadListener"/>
+        </properties>
+    </persistence-unit>
+</persistence>
+```
+
+- Utiliza interceptores si necesitas lógica que dependa del contexto de la sesión o si necesitas inspeccionar y potencialmente modificar el estado de las entidades en varios puntos del ciclo de vida dentro de una sesión.
+- Utiliza listeners si necesitas reaccionar a eventos específicos del ciclo de vida a nivel de aplicación (afectando a todas las sesiones) o si la lógica está muy ligada a un evento en particular (por ejemplo, enviar una notificación por correo electrónico después de la creación de un usuario)
+
 <a id="generacion-de-esquema"></a>
 ### Generación de esquema
- 
+Hibernate puede automatizar la creación, actualización o validación del esquema de la base de datos basándose en las definiciones de tus entidades (el mapeo). Esto es especialmente útil durante el desarrollo y para la gestión de la evolución del esquema.
 
+La generación de esquema se controla principalmente a través de la propiedad hibernate.hbm2ddl.auto en el archivo de configuración de Hibernate o en las propiedades de JPA. Los valores comunes para esta propiedad son:
 
+* `none (o dejar sin configurar)`: Hibernate no realiza ninguna acción automática sobre el esquema de la base de datos.
+* `validate`: Hibernate valida el esquema de la base de datos existente comparándolo con las definiciones de las entidades. Si hay alguna discrepancia, lanza una excepción (SchemaManagementException).
+* `update`: Hibernate intenta actualizar el esquema de la base de datos para que coincida con las definiciones de las entidades. Agrega tablas y columnas faltantes, pero no elimina tablas o columnas existentes. Es importante usar esta opción con precaución en entornos de producción, ya que puede resultar en la pérdida de datos si el modelo se reduce.
+* `create`: Hibernate primero elimina el esquema existente y luego crea un nuevo esquema basado en las definiciones de las entidades. ¡Peligroso para entornos de producción ya que todos los datos se perderán!
+* `create-drop`: Similar a create, pero además elimina el esquema cuando la SessionFactory se cierra. Útil para pruebas unitarias e integración.
+
+> Ejemplo de Configuración en hibernate.cfg.xml
+```
+<hibernate-configuration>
+    <session-factory>
+        <property name="hibernate.hbm2ddl.auto">update</property>
+    </session-factory>
+</hibernate-configuration>
+```
+
+> Ejemplo de configuración en persistence.xml (JPA)
+```
+<persistence version="2.2" xmlns="http://xmlns.jcp.org/xml/ns/persistence"
+             xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+             xsi:schemaLocation="http://xmlns.jcp.org/xml/ns/persistence http://xmlns.jcp.org/xml/ns/persistence/persistence_2_2.xsd">
+    <persistence-unit name="miUnidadPersistencia">
+        <properties>
+            <property name="hibernate.hbm2ddl.auto" value="create-drop"/>
+        </properties>
+    </persistence-unit>
+</persistence>
+```
+
+- Consideraciones
+
+1.  La generación automática de esquema (especialmente create o update) puede acelerar el desarrollo al no tener que crear o modificar manualmente las tablas. Nunca se debe de utilizar create o create-drop en producción. update debe usarse con extrema precaución y bajo una gestión de cambios controlada, ya que puede alterar el esquema de forma inesperada y potencialmente perder datos
+2.  validate es una opción segura para entornos de producción para asegurarse de que el esquema de la base de datos coincide con el modelo de la aplicación. Si no coincide, la aplicación fallará al inicio, lo que puede prevenir errores en tiempo de ejecución debido a un esquema incorrecto.
