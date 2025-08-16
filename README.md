@@ -115,5 +115,5 @@
     - [`explain()` para análisis de consultas](#explain-mongodb)
     - [Uso eficiente de índices](#uso-eficiente-indices)
   - [Estrategias de Sharding y Replicación](#sharding-replicacion)
-  - [Manejo de Conexiones (Connection Pooling)](#manejo-conexiones-mongodb)
+  - [Manejo de Conexiones (Connection Pooling)](#manejo-conexiones-mongodb) 
   - [Gestión de Errores y Retries](#gestion-errores-retries-mongodb)
