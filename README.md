@@ -124,12 +124,30 @@
 
 <a id="que-es-mongodb"></a>
 ### ¿Qué es MongoDB?
+MongoDB es una base de datos de tipo NoSQL **orientada a documentos que almacena datos en un formato flexible y similar a JSON**. A diferencia de las bases de datos relacionales tradicionales que utilizan tablas y filas, **MongoDB utiliza una estructura de colecciones y documentos**, lo que la hace ideal para manejar grandes volúmenes de datos no estructurados o semiestructurados.
 
 <a id="conceptos-clave-mongodb"></a>
 #### Conceptos clave (Documentos, Colecciones, Bases de Datos)
 
+1. `Documento`: Es la unidad básica de datos en MongoDB. **Un documento es un conjunto de pares de campos y valores**. Los documentos son similares a las filas de una tabla en una base de datos relacional, pero con una estructura más flexible.
+
+2. `Colección`: Es un grupo de documentos. **Una colección es análoga a una tabla en una base de datos relacional**. No aplica un esquema estricto, lo que permite que los documentos dentro de una misma colección tengan estructuras diferentes.
+
+3. `Base de datos`: Un contenedor de colecciones. Un servidor de MongoDB puede alojar múltiples bases de datos.
+
 <a id="json-vs-bson"></a>
 #### JSON vs BSON
+
+* `JSON (JavaScript Object Notation)`:
+
+Es un formato de texto ligero para el intercambio de datos. Es fácil de leer y escribir por humanos, y las máquinas lo parsean y generan fácilmente.
+
+* `BSON (Binary JSON)`:
+
+**Es una representación binaria del formato JSON**. A diferencia de JSON, BSON incluye tipos de datos adicionales como `Date` y `BinData`. Es más eficiente en términos de espacio y velocidad de recorrido, lo que lo hace ideal para el almacenamiento de datos. 
+
+> [!NOTE]
+> MongoDB almacena los documentos internamente en formato BSON.
 
 <a id="ventajas-casos-uso-mongodb"></a>
 #### Ventajas y Casos de Uso de MongoDB
