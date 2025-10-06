@@ -151,6 +151,9 @@ Es un formato de texto ligero para el intercambio de datos. Es fácil de leer y 
 
 <a id="ventajas-casos-uso-mongodb"></a>
 #### Ventajas y Casos de Uso de MongoDB
+Los datos se almacenan en documentos JSON-like, facilitando el mapeo natural con objetos de lenguajes como JavaScript, Java o Python.
+
+Ideal para aplicaciones que manejan estructuras de datos complejas o anidadas.
 
 <a id="modelo-consistencia-mongodb"></a>
 #### Modelo de Consistencia
